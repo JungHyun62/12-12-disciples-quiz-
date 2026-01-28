@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>12제자 퀴즈</title>
+    <style>
+        :root { --primary: #2c3e50; --accent: #d4af37; --danger: #e74c3c; --bg: #fdfaf6; }
+        body { font-family: 'Apple SD Gothic Neo', sans-serif; background-color: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        #game-box { background: white; padding: 2.5rem; border-radius: 25px; box-shadow: 0 20px 50px rgba(0,0,0,0.1); width: 90%; max-width: 450px; text-align: center; }
+        .screen { display: none; }
+        .active { display: block; animation: fadeIn 0.4s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        button { padding: 15px 25px; background: var(--primary); color: white; border: none; border-radius: 12px; font-size: 1.1rem; cursor: pointer; width: 100%; margin: 10px 0; }
+        button:hover { background: #34495e; }
+        input[type="text"] { width: 85%; padding: 15px; border: 2px solid #ddd; border-radius: 10px; font-size: 1.1rem; text-align: center; margin-bottom: 15px; }
+        
+        .timer { font-size: 2.5rem; font-weight: 900; margin-bottom: 10px; color: var(--primary); }
+        #question-box { background: #fff9e6; padding: 1.5rem; border-radius: 15px; border-left: 8px solid var(--accent); margin-bottom: 20px; font-size: 1.1rem; line-height: 1.6; }
+        
+        table { width: 100%; margin-top: 15px; border-collapse: collapse; font-size: 0.9rem; }
+        th, td { padding: 10px; border-bottom: 1px solid #eee; }
+    </style>
+</head>
+<body>
+
+<div id="game-box">
+    <div id="start-screen" class="screen active">
+        <div style="font-size: 4rem;">⛵</div>
+        <h1>12제자 퀴즈</h1>
+        <p>30초 안에 제자의 이름을 맞히세요!</p>
+        <input type="text" id="player-name" placeholder="이름을 입력하세요" maxlength="8">
+        <button onclick="startGame()">게임 시작</button>
+        <button style="background:#95a5a6;" onclick="showRanking()">랭킹 보기</button>
+    </div>
+
+    <div id="quiz-screen" class="screen">
+        <div id="timer-display" class="timer">30</div>
+        <div style="margin-bottom:10px; font-weight:bold; color:#666;">
+            문제 <span id="q-idx">1</span>/12 | 오답 <span id="w-count">0</span>/3
+        </div>
+        <div id="question-box"></div>
+        <input type="text" id="answer-input" placeholder="정답 입력" autocomplete="off">
+        <button onclick="checkAnswer()">확인</button>
+        <div id="feedback" style="margin-top:15px; min-height:1.5rem; font-weight:bold;"></div>
+    </div>
+
+    <div id="rank-screen" class="screen">
+        <h2 id="result-title">🏆 명예의 전당</h2>
+        <div id="final-info" style="margin-bottom:15px; font-weight:bold;"></div>
+        <table>
+            <thead><tr><th>순위</th><th>이름</th><th>점수</th><th>날짜</th></tr></thead>
+            <tbody id="rank-list" style="text-align:center;"></tbody>
+        </table>
+        <button style="margin-top:20px;" onclick="location.reload()">처음으로</button>
+    </div>
+</div>
+
+<script>
+    const disciplesData = [
+        { name: "베드로", hint: "수제자이며 '반석'이라는 뜻의 이름을 가졌습니다." },
+        { name: "안드레", hint: "베드로의 형제이며 원래 세례 요한의 제자였습니다." },
+        { name: "야고보", hint: "세베대의 아들로 첫 순교자가 되었습니다." },
+        { name: "요한", hint: "예수님이 사랑하신 제자이며 요한복음을 썼습니다." },
+        { name: "빌립", hint: "나다나엘을 예수님께 인도했습니다." },
+        { name: "바돌로매", hint: "나다나엘이라고도 불리는 제자입니다." },
+        { name: "마태", hint: "세리 출신의 복음서 저자입니다." },
+        { name: "도마", hint: "부활을 의심했으나 상처를 보고 믿었습니다." },
+        { name: "야고보", hint: "알패오의 아들로 '작은 야고보'라고 불립니다." },
+        { name: "다대오", hint: "야고보의 아들 유다라고도 불립니다." },
+        { name: "시몬", hint: "열심당원 출신으로 뜨거운 열정을 가졌던 제자입니다." },
+        { name: "유다", hint: "예수님을 은 30에 팔아넘긴 가룟 사람입니다." }
+    ];
+
+    let quizSet = [];
+    let currentIdx = 0;
+    let wrongCount = 0;
+    let correctCount = 0;
+    let timeLeft = 30;
+    let timerInt;
+
+    function startGame() {
+        const nameInput = document.getElementById('player-name').value.trim();
+        if (!nameInput) {
+            alert("이름을 입력해주세요!");
+            return;
+        }
+
+        quizSet = [...disciplesData].sort(() => Math.random() - 0.5);
+        currentIdx = 0;
+        correctCount = 0;
+        showScreen('quiz-screen');
+        loadQuestion();
+    }
+
+    function loadQuestion() {
+        if (currentIdx >= 12) return endQuiz();
+        
+        wrongCount = 0;
+        document.getElementById('w-count').innerText = 0;
+        document.getElementById('q-idx').innerText = currentIdx + 1;
+        document.getElementById('question-box').innerText = quizSet[currentIdx].hint;
+        
+        const input = document.getElementById('answer-input');
+        input.value = "";
+        document.getElementById('feedback').innerText = "";
+        input.focus();
+        
+        startTimer();
+    }
+
+    function startTimer() {
+        clearInterval(timerInt);
+        timeLeft = 30;
+        const display = document.getElementById('timer-display');
+        display.innerText = timeLeft;
+        timerInt = setInterval(() => {
+            timeLeft--;
+            display.innerText = timeLeft;
+            if(timeLeft <= 0) {
+                clearInterval(timerInt);
+                revealAnswer("⏰ 시간 초과!");
+            }
+        }, 1000);
+    }
+
+    function checkAnswer() {
+        const val = document.getElementById('answer-input').value.trim();
+        if (!val) return;
+
+        if (val === quizSet[currentIdx].name) {
+            clearInterval(timerInt);
+            correctCount++;
+            document.getElementById('feedback').innerHTML = "<span style='color:green'>정답입니다! 🎉</span>";
+            setTimeout(() => { currentIdx++; loadQuestion(); }, 1000);
+        } else {
+            wrongCount++;
+            document.getElementById('w-count').innerText = wrongCount;
+            if (wrongCount >= 3) {
+                revealAnswer("❌ 3회 오답!");
+            } else {
+                document.getElementById('feedback').innerHTML = "<span style='color:red'>틀렸습니다!</span>";
+                document.getElementById('answer-input').value = "";
+            }
+        }
+    }
+
+    function revealAnswer(msg) {
+        clearInterval(timerInt);
+        document.getElementById('feedback').innerHTML = `<span style='color:red'>${msg} 정답: ${quizSet[currentIdx].name}</span>`;
+        setTimeout(() => { currentIdx++; loadQuestion(); }, 2000);
+    }
+
+    function endQuiz() {
+        clearInterval(timerInt);
+        const name = document.getElementById('player-name').value;
+        let ranks = JSON.parse(localStorage.getItem('bible_ranks')) || [];
+        ranks.push({ name, score: correctCount, date: new Date().toLocaleDateString() });
+        ranks.sort((a, b) => b.score - a.score);
+        localStorage.setItem('bible_ranks', JSON.stringify(ranks.slice(0, 10)));
+        
+        document.getElementById('final-info').innerText = `${name}님, 총 ${correctCount}명 성공!`;
+        showRanking();
+    }
+
+    function showRanking() {
+        const ranks = JSON.parse(localStorage.getItem('bible_ranks')) || [];
+        const list = document.getElementById('rank-list');
+        list.innerHTML = ranks.map((r, i) => `
+            <tr>
+                <td>${i+1}</td>
+                <td>${r.name}</td>
+                <td>${r.score}</td>
+                <td>${r.date}</td>
+            </tr>`).join('');
+        showScreen('rank-screen');
+    }
+
+    function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
+
+    document.getElementById('answer-input').addEventListener('keypress', e => {
+        if(e.key === 'Enter') checkAnswer();
+    });
+</script>
+</body>
+</html>
